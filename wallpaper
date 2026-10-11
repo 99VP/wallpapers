@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+# wallpaper — a tiny static wallpaper manager for Wayland/Hyprland (also X11).
+#
+#   wallpaper set <file>      apply a specific image
+#   wallpaper random          apply a random image
+#   wallpaper next|prev       cycle through the folder
+#   wallpaper pick            choose with fuzzel / rofi / wofi
+#   wallpaper list [--bright] list images (optionally darkest -> lightest)
+#   wallpaper restore         re-apply the last image (use at session start)
+#
+# Config (optional): ~/.config/wallpaper/config
+#   WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+#   WALLPAPER_BACKEND=auto         # auto|awww|swww|hyprpaper|swaybg|feh
+#
+# License: MIT
+set -u
+
+VERSION="1.0.0"
+PROG="$(basename "$0")"
+
+CONF="${WALLPAPER_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/wallpaper/config}"
+# shellcheck disable=SC1090
+[ -r "$CONF" ] && . "$CONF"
+
+: "${WALLPAPER_DIR:=$HOME/Pictures/Wallpapers}"
+: "${WALLPAPER_BACKEND:=auto}"          # auto|awww|swww|hyprpaper|swaybg|feh
+: "${WALLPAPER_MODE:=fill}"             # swaybg scale mode
+: "${WALLPAPER_TRANSITION:=any}"        # awww/swww transition type
+: "${WALLPAPER_TRANSITION_DURATION:=0.6}"
+
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/wallpaper"
+STATE="$CACHE/last"
+BRIGHT_CACHE="$CACHE/brightness.tsv"
+mkdir -p "$CACHE" 2>/dev/null || true
+touch "$BRIGHT_CACHE" 2>/dev/null || true
+
+die()  { printf '%s: %s\n' "$PROG" "$*" >&2; exit 1; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+detect_backend() {
+    [ "$WALLPAPER_BACKEND" != auto ] && { printf '%s' "$WALLPAPER_BACKEND"; return; }
+    local b
+    for b in awww swww hyprpaper swaybg feh; do
+        have "$b" && { printf '%s' "$b"; return; }
+    done
+    printf 'none'
+}
+
+start_hyprpaper() {
+    pgrep -x hyprpaper >/dev/null 2>&1 && return 0
+    have hyprpaper || die "hyprpaper is not installed"
+    setsid hyprpaper >/dev/null 2>&1 &
+    sleep 0.4
+}
+
+apply() {                               # apply <file> [monitor]
+    local f="$1" mon="${2:-}" b out
+    [ -f "$f" ] || die "no such file: $f"
+    b="$(detect_backend)"
+    case "$b" in
+        awww|swww)
+            out=""
+            [ -n "$mon" ] && out="--outputs $mon"
+            # shellcheck disable=SC2086
+            $b img "$f" $out \
+                --transition-type "$WALLPAPER_TRANSITION" \
+                --transition-duration "$WALLPAPER_TRANSITION_DURATION" ;;
+        hyprpaper)
+            start_hyprpaper
+            hyprctl hyprpaper unload all >/dev/null 2>&1
+            hyprctl hyprpaper preload "$f" >/dev/null 2>&1
+            hyprctl hyprpaper wallpaper "$mon,$f" >/dev/null 2>&1 ;;
+        swaybg)
+            pkill -x swaybg >/dev/null 2>&1
+            setsid swaybg -i "$f" -m "$WALLPAPER_MODE" >/dev/null 2>&1 & ;;
+        feh)
+            feh --bg-fill "$f" ;;
+        *)
+            die "no wallpaper backend found (install awww, swww, hyprpaper, swaybg or feh)" ;;
+    esac
+    printf '%s\n' "$f" > "$STATE"
+    printf '\342\234\224 %s  [%s]\n' "$(basename "$f")" "$b"
+}
+
+list_images() {
+    [ -d "$WALLPAPER_DIR" ] || return 0
+    find "$WALLPAPER_DIR" -maxdepth 4 -type f \
+        \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \
+           -o -iname '*.bmp' -o -iname '*.avif' \) 2>/dev/null | LC_ALL=C sort
+}
+
+brightness_of() {                       # -> 0..1 (cached)
+    local f="$1" g
+    g="$(awk -F'\t' -v p="$f" '$1==p {print $2; exit}' "$BRIGHT_CACHE" 2>/dev/null)"
+    [ -n "$g" ] && { printf '%s' "$g"; return; }
+    if have magick; then
+        g="$(magick "$f" -colorspace Gray -format '%[fx:mean]' info: 2>/dev/null)"
+    elif have convert; then
+        g="$(convert "$f" -colorspace Gray -format '%[fx:mean]' info: 2>/dev/null)"
+    fi
+    [ -z "$g" ] && g="0.5"
+    printf '%s\t%s\n' "$f" "$g" >> "$BRIGHT_CACHE"
+    printf '%s' "$g"
+}
+
+sorted_images() {                       # darkest -> lightest
+    local f
+    while IFS= read -r f; do
+        printf '%s\t%s\n' "$(brightness_of "$f")" "$f"
+    done < <(list_images) | LC_ALL=C sort -n | cut -f2-
+}
+
+cmd_set()    { [ $# -ge 1 ] || die "usage: $PROG set <file> [monitor]"; apply "$1" "${2:-}"; }
+
+cmd_random() {
+    local list n r
+    mapfile -t list < <(list_images)
+    n="${#list[@]}"; [ "$n" -gt 0 ] || die "no images in $WALLPAPER_DIR"
+    r=$(( RANDOM % n ))
+    apply "${list[$r]}" "${1:-}"
+}
+
+cmd_cycle() {                           # $1=delta  $2=monitor
+    local delta="$1" mon="${2:-}" list n cur i k
+    mapfile -t list < <(list_images)
+    n="${#list[@]}"; [ "$n" -gt 0 ] || die "no images in $WALLPAPER_DIR"
+    cur="$(cat "$STATE" 2>/dev/null || true)"
+    i=-1
+    for k in "${!list[@]}"; do [ "${list[$k]}" = "$cur" ] && { i="$k"; break; }; done
+    [ "$i" -lt 0 ] && i=0
+    i=$(( (i + delta + n) % n ))
+    apply "${list[$i]}" "$mon"
+}
+
+cmd_pick() {
+    local sel
+    if   have fuzzel; then sel="$(sorted_images | fuzzel --dmenu --prompt 'wallpaper > ' --width 70)"
+    elif have rofi;   then sel="$(sorted_images | rofi -dmenu -i -p 'wallpaper')"
+    elif have wofi;   then sel="$(sorted_images | wofi --dmenu --prompt 'wallpaper')"
+    else die "no dmenu picker found (install fuzzel, rofi or wofi)"; fi
+    [ -n "${sel:-}" ] || return 0
+    apply "$sel" "${1:-}"
+}
+
+cmd_list() { if [ "${1:-}" = --bright ] || [ "${1:-}" = -b ]; then sorted_images; else list_images; fi; }
+
+cmd_restore() {
+    local f; f="$(cat "$STATE" 2>/dev/null || true)"
+    [ -n "$f" ] && [ -f "$f" ] || { printf '%s: nothing to restore\n' "$PROG"; return 0; }
+    apply "$f"
+}
+
+usage() {
+    cat <<EOF
+$PROG $VERSION — static wallpaper manager for Wayland/Hyprland
+
+Usage: $PROG <command> [args]
+
+  set <file> [monitor]   apply a specific image
+  random [monitor]       apply a random image
+  next | prev [monitor]  cycle through the folder
+  pick [monitor]         choose with fuzzel / rofi / wofi
+  list [--bright]        list images (--bright: darkest -> lightest)
+  restore                re-apply the last image (autostart)
+  dir                    print the wallpaper folder
+  backend                print the detected backend
+
+Folder : $WALLPAPER_DIR
+Config : $CONF
+         (WALLPAPER_DIR, WALLPAPER_BACKEND=auto|awww|swww|hyprpaper|swaybg|feh)
+EOF
+}
+
+case "${1:-}" in
+    set)                     shift; cmd_set "$@" ;;
+    random|rand)             shift; cmd_random "$@" ;;
+    next)                    shift; cmd_cycle 1  "${1:-}" ;;
+    prev)                    shift; cmd_cycle -1 "${1:-}" ;;
+    pick)                    shift; cmd_pick "${1:-}" ;;
+    list|ls)                 shift; cmd_list "${1:-}" ;;
+    restore)                 cmd_restore ;;
+    dir)                     printf '%s\n' "$WALLPAPER_DIR" ;;
+    backend)                 detect_backend; printf '\n' ;;
+    version|--version|-v)    printf '%s %s\n' "$PROG" "$VERSION" ;;
+    help|--help|-h|"")       usage ;;
+    *) die "unknown command: $1 (try: $PROG help)" ;;
+esac

@@ -1,0 +1,14 @@
+# Скопируйте в ~/.config/wallpaper/config и поправьте под себя.
+
+# Папка с обоями
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+
+# Бэкенд: auto | awww | swww | hyprpaper | swaybg | feh
+WALLPAPER_BACKEND=auto
+
+# Режим масштабирования для swaybg: fill | fit | stretch | center | tile
+WALLPAPER_MODE=fill
+
+# Переход для awww/swww: any | fade | wipe | grow | outer | random  (и длительность, сек)
+WALLPAPER_TRANSITION=any
+WALLPAPER_TRANSITION_DURATION=0.6
