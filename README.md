@@ -1,42 +1,49 @@
 # wallpapers
 
-Маленький менеджер **статичных обоев** для Hyprland / Wayland (работает и на X11 через `feh`).
-Выбор, случайные, листание и сортировка папки по яркости — с автоопределением бэкенда.
+Простой менеджер статичных обоев для Hyprland и Wayland. Работает и на X11 через feh.
+Умеет ставить обои, выбирать из списка, листать папку и сортировать по яркости.
 
-## Что делает
-- Ставит обои из папки через **hyprpaper / swww+awww / swaybg / feh** (что найдёт в системе).
-- `pick` — выбор через **fuzzel / rofi / wofi**, а также `random`, `next`/`prev`.
-- `list --bright` — сортировка от тёмных к светлым (нужен ImageMagick).
-- Запоминает последние обои — `restore` для автозапуска сессии.
+## Что умеет
+- Ставит картинку из папки. Бэкенд находит сам: hyprpaper, swww, awww, swaybg или feh.
+- pick: выбор через fuzzel, rofi или wofi.
+- random: случайная картинка.
+- next и prev: листать папку.
+- list --bright: сортировка от тёмных к светлым (нужен ImageMagick).
+- restore: вернуть последние обои. Удобно для автозапуска.
 
 ## Установка
 ```sh
-git clone https://github.com/<ВАШ_НИК>/wallpapers
+git clone https://github.com/ВАШ_НИК/wallpapers
 cd wallpapers
-./install.sh            # положит команду `wallpaper` в ~/.local/bin
+./install.sh
 ```
-Нужен `bash` и `find`. Бэкенд — любой один из: `hyprpaper`, `swww`/`awww`, `swaybg`, `feh`.
-Опционально: `fuzzel`/`rofi`/`wofi` (меню выбора) и `imagemagick` (сортировка по яркости).
+install.sh кладёт команду `wallpaper` в ~/.local/bin.
 
-> Для **hyprpaper 0.8+** (у него убрали старый `hyprctl`-IPC) утилита держит свой
-> конфиг `~/.cache/wallpaper/hyprpaper.conf` и перезапускает `hyprpaper -c` с ним.
-> Старые версии (≤ 0.7) работают через обычный IPC.
+Что нужно:
+- bash и find (почти всегда есть).
+- один бэкенд: hyprpaper, swww, awww, swaybg или feh.
+- по желанию: fuzzel, rofi или wofi для меню выбора.
+- по желанию: ImageMagick для сортировки по яркости.
+
+Про hyprpaper 0.8 и новее: там убрали старый hyprctl. Утилита держит свой конфиг
+(~/.cache/wallpaper/hyprpaper.conf) и перезапускает `hyprpaper -c` с ним. На версии
+0.7 и старше работает обычный IPC.
 
 ## Быстрый старт
+Положите картинки в ~/Pictures/Wallpapers. Или укажите свою папку в WALLPAPER_DIR.
 ```sh
-# положите картинки в ~/Pictures/Wallpapers (или задайте WALLPAPER_DIR)
-wallpaper pick       # выбрать из списка
-wallpaper random     # случайные
-wallpaper next       # следующие / prev — предыдущие
+wallpaper pick     # выбрать из списка
+wallpaper random   # случайная
+wallpaper next     # следующая (prev: предыдущая)
 ```
 
-Необязательный конфиг `~/.config/wallpaper/config`:
+Конфиг (необязательно), файл ~/.config/wallpaper/config:
 ```sh
 WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
-WALLPAPER_BACKEND=auto      # auto|awww|swww|hyprpaper|swaybg|feh
+WALLPAPER_BACKEND=auto
 ```
 
-## Hyprland (новый Lua-конфиг, 0.5x+)
+## Hyprland (новый Lua-конфиг, 0.5x и новее)
 ```lua
 hl.on("hyprland.start", function()
     hl.exec_cmd("wallpaper restore")
@@ -46,20 +53,23 @@ hl.bind("SUPER + SHIFT + W", hl.dsp.exec_cmd("wallpaper random"))
 ```
 
 ## Демоны
-Своих демонов утилита **не держит**. Постоянно работает только бэкенд, и **ровно один**:
+Своих демонов утилита не держит. Постоянно работает только бэкенд, и только один:
+- hyprpaper или swww/awww это демон в памяти;
+- swaybg это один фоновый процесс;
+- feh это разовая установка, процесса не держит.
 
-- `hyprpaper` или `swww`/`awww` — это демон в памяти;
-- `swaybg` — один фоновый процесс;
-- `feh` — разовая установка, процесса не держит вообще.
-
-Без `WALLPAPER_BACKEND` утилита сама выбирает **первый найденный** бэкенд и использует только его.
+Если не задать WALLPAPER_BACKEND, утилита берёт первый найденный бэкенд.
 
 ## Команды
 ```
-wallpaper set <file> [monitor]     wallpaper random [monitor]
-wallpaper next | prev [monitor]    wallpaper pick [monitor]
-wallpaper list [--bright]          wallpaper restore
-wallpaper dir                      wallpaper backend
+wallpaper set <файл> [монитор]
+wallpaper random [монитор]
+wallpaper next | prev [монитор]
+wallpaper pick [монитор]
+wallpaper list [--bright]
+wallpaper restore
+wallpaper dir
+wallpaper backend
 ```
 
 ## Лицензия
