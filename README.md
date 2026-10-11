@@ -18,6 +18,10 @@ cd wallpapers
 Нужен `bash` и `find`. Бэкенд — любой один из: `hyprpaper`, `swww`/`awww`, `swaybg`, `feh`.
 Опционально: `fuzzel`/`rofi`/`wofi` (меню выбора) и `imagemagick` (сортировка по яркости).
 
+> Для **hyprpaper 0.8+** (у него убрали старый `hyprctl`-IPC) утилита держит свой
+> конфиг `~/.cache/wallpaper/hyprpaper.conf` и перезапускает `hyprpaper -c` с ним.
+> Старые версии (≤ 0.7) работают через обычный IPC.
+
 ## Быстрый старт
 ```sh
 # положите картинки в ~/Pictures/Wallpapers (или задайте WALLPAPER_DIR)

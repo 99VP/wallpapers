@@ -31,6 +31,7 @@ CONF="${WALLPAPER_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/wallpaper/config}"
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/wallpaper"
 STATE="$CACHE/last"
 BRIGHT_CACHE="$CACHE/brightness.tsv"
+HYPRPAPER_CONF="${WALLPAPER_HYPRPAPER_CONF:-$CACHE/hyprpaper.conf}"
 mkdir -p "$CACHE" 2>/dev/null || true
 touch "$BRIGHT_CACHE" 2>/dev/null || true
 
@@ -46,11 +47,42 @@ detect_backend() {
     printf 'none'
 }
 
-start_hyprpaper() {
-    pgrep -x hyprpaper >/dev/null 2>&1 && return 0
+# hyprpaper 0.8+ dropped the old hyprctl IPC and reads a `wallpaper {}` block from
+# its config, so we keep our own config and restart it (0.7 and older use the IPC).
+hyprpaper_is_new() {
+    local v maj min
+    v="$(hyprpaper --version 2>/dev/null | sed -n 's/.*v\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2/p')"
+    [ -n "$v" ] || return 1
+    maj="${v%% *}"; min="${v##* }"
+    [ "$maj" -gt 0 ] || [ "$min" -ge 8 ]
+}
+
+apply_hyprpaper() {                     # <file> [monitor]
+    local f="$1" mon="${2:-}" fit=cover
     have hyprpaper || die "hyprpaper is not installed"
-    setsid hyprpaper >/dev/null 2>&1 &
-    sleep 0.4
+    case "$WALLPAPER_MODE" in
+        fit|contain) fit=contain ;;
+        stretch)     fit=stretch ;;
+        tile)        fit=tile ;;
+    esac
+    if hyprpaper_is_new; then
+        mkdir -p "$(dirname "$HYPRPAPER_CONF")"
+        {
+            printf 'wallpaper {\n'
+            printf '    monitor = %s\n' "$mon"
+            printf '    path = %s\n' "$f"
+            printf '    fit_mode = %s\n' "$fit"
+            printf '}\n'
+        } > "$HYPRPAPER_CONF"
+        pkill -x hyprpaper >/dev/null 2>&1
+        sleep 0.3
+        setsid hyprpaper -c "$HYPRPAPER_CONF" >/dev/null 2>&1 &
+    else
+        pgrep -x hyprpaper >/dev/null 2>&1 || { setsid hyprpaper >/dev/null 2>&1 & sleep 0.4; }
+        hyprctl hyprpaper unload all >/dev/null 2>&1
+        hyprctl hyprpaper preload "$f" >/dev/null 2>&1
+        hyprctl hyprpaper wallpaper "$mon,$f" >/dev/null 2>&1
+    fi
 }
 
 apply() {                               # apply <file> [monitor]
@@ -66,10 +98,7 @@ apply() {                               # apply <file> [monitor]
                 --transition-type "$WALLPAPER_TRANSITION" \
                 --transition-duration "$WALLPAPER_TRANSITION_DURATION" ;;
         hyprpaper)
-            start_hyprpaper
-            hyprctl hyprpaper unload all >/dev/null 2>&1
-            hyprctl hyprpaper preload "$f" >/dev/null 2>&1
-            hyprctl hyprpaper wallpaper "$mon,$f" >/dev/null 2>&1 ;;
+            apply_hyprpaper "$f" "$mon" ;;
         swaybg)
             pkill -x swaybg >/dev/null 2>&1
             setsid swaybg -i "$f" -m "$WALLPAPER_MODE" >/dev/null 2>&1 & ;;
