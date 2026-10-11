@@ -37,10 +37,21 @@ WALLPAPER_BACKEND=auto      # auto|awww|swww|hyprpaper|swaybg|feh
 ```
 
 ## Hyprland
+
+Классический `hyprland.conf`:
 ```ini
 exec-once = wallpaper restore
 bind = SUPER, W, exec, wallpaper pick
 bind = SUPER SHIFT, W, exec, wallpaper random
+```
+
+Новый **Lua-конфиг** (Hyprland 0.5x+):
+```lua
+hl.on("hyprland.start", function()
+    hl.exec_cmd("wallpaper restore")
+end)
+hl.bind("SUPER + W", hl.dsp.exec_cmd("wallpaper pick"), { description = "Wallpaper" })
+hl.bind("SUPER + SHIFT + W", hl.dsp.exec_cmd("wallpaper random"))
 ```
 
 ## Команды
