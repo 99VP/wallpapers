@@ -36,16 +36,7 @@ WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
 WALLPAPER_BACKEND=auto      # auto|awww|swww|hyprpaper|swaybg|feh
 ```
 
-## Hyprland
-
-Классический `hyprland.conf`:
-```ini
-exec-once = wallpaper restore
-bind = SUPER, W, exec, wallpaper pick
-bind = SUPER SHIFT, W, exec, wallpaper random
-```
-
-Новый **Lua-конфиг** (Hyprland 0.5x+):
+## Hyprland (новый Lua-конфиг, 0.5x+)
 ```lua
 hl.on("hyprland.start", function()
     hl.exec_cmd("wallpaper restore")
@@ -53,6 +44,15 @@ end)
 hl.bind("SUPER + W", hl.dsp.exec_cmd("wallpaper pick"), { description = "Wallpaper" })
 hl.bind("SUPER + SHIFT + W", hl.dsp.exec_cmd("wallpaper random"))
 ```
+
+## Демоны
+Своих демонов утилита **не держит**. Постоянно работает только бэкенд, и **ровно один**:
+
+- `hyprpaper` или `swww`/`awww` — это демон в памяти;
+- `swaybg` — один фоновый процесс;
+- `feh` — разовая установка, процесса не держит вообще.
+
+Без `WALLPAPER_BACKEND` утилита сама выбирает **первый найденный** бэкенд и использует только его.
 
 ## Команды
 ```
